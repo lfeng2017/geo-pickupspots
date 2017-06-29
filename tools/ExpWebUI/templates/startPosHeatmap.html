@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no, width=device-width">
+    <title>上车点分布</title>
+    <link rel="stylesheet" href="http://cache.amap.com/lbs/static/main1119.css"/>
+    <style>
+        .marker {
+            color: #ff6600;
+            padding: 4px 10px;
+            border: 1px solid #fff;
+            white-space: nowrap;
+            font-size: 12px;
+            font-family: "";
+            background-color: #0066ff;
+        }
+    </style>
+    <script type="text/javascript"
+            src="http://webapi.amap.com/maps?v=1.3&key=608d75903d29ad471362f8c58c550daf"></script>
+    <script type="text/javascript" src="http://cache.amap.com/lbs/static/addToolbar.js"></script>
+    <script type="text/javascript" src="http://cdn.staticfile.org/jquery/3.1.1/jquery.min.js"></script>
+    <style type="text/css">
+        body {
+            font-size: 12px;
+        }
+
+        #tip {
+            background-color: #ddf;
+            color: #333;
+            border: 1px solid silver;
+            box-shadow: 3px 4px 3px 0px silver;
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            border-radius: 5px;
+            overflow: hidden;
+            line-height: 20px;
+        }
+
+        #tip input[type="text"] {
+            height: 25px;
+            border: 0;
+            padding-left: 5px;
+            width: 280px;
+            border-radius: 3px;
+            outline: none;
+        }
+    </style>
+</head>
+
+<body>
+<div id="container"></div>
+<div id="tip">
+    <input type="text" id="keyword" name="keyword" value="请输入关键字：(选定后搜索)" onfocus='this.value=""'/>
+</div>
+<div class="button-group">
+    <!--
+    <fieldset id="">
+        <label for="info">info:</label>
+        <input id="info" type="textarea" value="" rows="3" cols="20"/>
+    </fieldset>
+    -->
+    <fieldset id="">
+        <label for="start_pos">开始点坐标:</label>
+        <input id="start_pos" type="text" value="200"/>
+    </fieldset>
+    <fieldset>
+        <label for="geohashLv">geohash lv:</label>
+        <input id="geohashLv" type="range" min="5" max="8" step="1" value="6"
+               onchange="document.getElementById('geohashLvValLabel').innerHTML = this.value;">
+        </input>
+        <em id="geohashLvValLabel" style="font-style: normal;">6</em>
+    </fieldset>
+    <fieldset>
+        <label for="topK">topK:</label>
+        <input id="topK" type="text" value="200"/>
+    </fieldset>
+    <fieldset>
+        <label for="radius">radius:</label>
+        <input id="radius" type="text" value="200"/>
+    </fieldset>
+    <fieldset id="markerRule">
+        <label for="is_show_marker">marker:</label>
+        是<input type="radio" value='true' name='is_show_marker'/>
+        否<input type="radio" value='false' name='is_show_marker' checked="true"/>
+    </fieldset>
+    <fieldset id="varFilterRule">
+        <label for="isVarFailter">filter:</label>
+        是<input type="radio" value='true' name='isVarFailter'/>
+        否<input type="radio" value='false' name='isVarFailter' checked="true"/>
+    </fieldset>
+    <fieldset id="clusterRule">
+        <label for="isClustering">clustering:</label>
+        是<input type="radio" value='true' name='isClustering'/>
+        否<input type="radio" value='false' name='isClustering' checked="true"/>
+    </fieldset>
+</div>
+<script>
+    var map = new AMap.Map("container", {
+        resizeEnable: true,
+        center: [116.30809414471425, 39.98410192693929],
+        keyboardEnable: false,
+        zoom: 16
+    });
+    var historyMarkers = new Array();
+    var infoWindow = new AMap.InfoWindow({
+        offset: new AMap.Pixel(0, -30)
+    });
+
+    AMap.plugin(['AMap.Autocomplete', 'AMap.PlaceSearch'], function () { //回调函数
+        //实例化Autocomplete
+        var autoOptions = {
+            city: "北京", //城市，默认全国
+            input: "keyword" //使用联想输入的input的id
+        };
+        autocomplete = new AMap.Autocomplete(autoOptions);
+        var placeSearch = new AMap.PlaceSearch({
+            city: '北京',
+            map: map
+        });
+        AMap.event.addListener(autocomplete, "select", function (e) {
+            placeSearch.search(e.poi.name)
+        });
+    });
+
+    if (!isSupportCanvas()) {
+        alert('热力图仅对支持canvas的浏览器适用,您所使用的浏览器不能使用热力图功能,请换个浏览器试试~')
+    }
+    //详细的参数,可以查看heatmap.js的文档 http://www.patrick-wied.at/static/heatmapjs/docs.html
+    //参数说明如下:
+    /* visible 热力图是否显示,默认为true
+     * opacity 热力图的透明度,分别对应heatmap.js的minOpacity和maxOpacity
+     * radius 势力图的每个点的半径大小
+     * gradient  {JSON} 热力图的渐变区间 . gradient如下所示
+     *	{
+     .2:'rgb(0, 255, 255)',
+     .5:'rgb(0, 110, 255)',
+     .8:'rgb(100, 0, 255)'
+     }
+     其中 key 表示插值的位置, 0-1
+     value 为颜色值
+     */
+    var heatmap;
+    map.plugin(["AMap.Heatmap"], function () {
+        //初始化heatmap对象
+        heatmap = new AMap.Heatmap(map, {
+            radius: 25, //给定半径
+            opacity: [0, 0.8]
+            /*,gradient:{
+             0.5: 'blue',
+             0.65: 'rgb(117,211,248)',
+             0.7: 'rgb(0, 255, 0)',
+             0.9: '#ffea00',
+             1.0: 'red'
+             }*/
+        });
+    });
+    //判断浏览区是否支持canvas
+    function isSupportCanvas() {
+        var elem = document.createElement('canvas');
+        return !!(elem.getContext && elem.getContext('2d'));
+    }
+
+    var _onClick = function (e) {
+
+        var lat = e.lnglat.lat;
+        var lng = e.lnglat.lng;
+        map.setCenter([lng, lat]);
+
+        for (var i = 0; i < historyMarkers.length; i++) {
+            var marker = historyMarkers[i];
+            map.remove(marker);
+        }
+        historyMarkers.splice(0, historyMarkers.length);
+
+        getData(lat, lng, map);
+    };
+
+    var clickListener = AMap.event.addListener(map, "click", _onClick); //绑定事件，返回监听对象
+
+    function addMarker(lat, lng, map, iconurl, info) {
+        var marker = new AMap.Marker({
+            icon: iconurl,
+            position: [lng, lat],
+            map: map
+        });
+
+        marker.setLabel({
+            offset: new AMap.Pixel(10, -10),//修改label相对于maker的位置
+            content: info
+        });
+        historyMarkers.push(marker);
+        return marker;
+    }
+
+    var heatData = new Array();
+    function getData(lat, lng, map) {
+        // 显示开始点坐标
+        $("#start_pos").val(lat + "," + lng)
+        // 显示开始点
+        var startPos = addMarker(lat, lng, map, "{{ url_for('static', filename='mark_r.png') }}", "start");
+        var pos = lng + "," + lat
+        var lv = $('#geohashLv').val();
+        var radius = $("#radius").val();
+        // var isVarFailter =  ($('#varFilterRule input[name="isVarFailter"]:checked').val() == "true") ? 1 : 0;
+        var isVarFailter = $('#varFilterRule input[name="isVarFailter"]:checked').val();
+        var isClustering = $('#clusterRule input[name="isClustering"]:checked').val();
+        var url = "{{ url_for('api.StartPosCount') }}?lat=" + lat + "&lng=" + lng
+                + "&lv=" + lv + "&radius=" + radius
+                + "&isVarFailter=" + isVarFailter + "&isClustering=" + isClustering
+        console.info(url)
+        // topk个数
+        var topK = $('#topK').val();
+        $.ajax({
+            url: url,
+            success: function (data) {
+                if (data.info != "OK") {
+                    alert(data.info + " | " + data.radius)
+                    return
+                }
+                // 点基本统计量
+                var Count = data.count
+                var Distance = data.distance
+                var statInfo = "size: " + Count.count
+                        + "\n  Count: "
+                        + "var=" + Count.std.toFixed(2) + " | min=" + Count.min.toFixed(2) + " | mean=" + Count.mean.toFixed(2) + " | max=" + Count.max.toFixed(2)
+                        + " | 25%=" + Count["25%"].toFixed(2) + " | 50%=" + Count["50%"].toFixed(2) + " | 75%=" + Count["75%"].toFixed(2)
+                        + "\n  Distance: "
+                        + "var=" + Distance.std.toFixed(2) + " | min=" + Distance.min.toFixed(2) + " | mean=" + Distance.mean.toFixed(2) + " | max=" + Distance.max.toFixed(2)
+                        + " | 25%=" + Distance["25%"].toFixed(2) + " | 50%=" + Distance["50%"].toFixed(2) + " | 75%=" + Distance["75%"].toFixed(2)
+                console.info(statInfo)
+                //$("#info").val(info)
+                // 热力图数据
+                heatData.splice(0, heatData.length);
+                for (var i = 0; i < data.result.length && i < topK; i++) {
+                    heatData.push(data.result[i])
+                    // 是否显示点信息
+                    var is_show_marker = $('#markerRule input[name="is_show_marker"]:checked').val()
+                    if (is_show_marker == "true") {
+                        point = data.result[i];
+                        var lat = point.lat;
+                        var lng = point.lng;
+                        var info = point.count + " | " + point.name
+                        if (i < 10) {
+                            addMarker(lat, lng, map, "{{ url_for('static', filename='mark_g.png') }}", info);
+                        } else {
+                            addMarker(lat, lng, map, "{{ url_for('static', filename='mark_b.png') }}", info);
+                        }
+                    }
+                }
+                //console.info(JSON.stringify(heatData.slice(0, 5)))
+                //设置数据集：该数据为北京部分“公园”数据
+                heatmap.setDataSet({
+                    data: heatData,
+                    max: 100
+                });
+            },
+            settings: {
+                headers: {
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
+                    "Access-Control-Allow-Headers": "*"
+                },
+                error: function (xhr, ajaxOptions, thrownError) {
+                    console.error("" + xhr + ajaxOptions + thrownError);
+                },
+                crossDomain: true,
+                dataType: "json"
+            }
+        });
+    }
+
+
+</script>
+<script type="text/javascript" src="http://webapi.amap.com/demos/js/liteToolbar.js"></script>
+</body>
+
+</html>

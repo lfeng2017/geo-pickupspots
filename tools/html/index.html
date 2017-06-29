@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no, width=device-width">
+    <title>点标记</title>
+    <link rel="stylesheet" href="http://cache.amap.com/lbs/static/main1119.css" />
+    <style>
+        .marker {
+            color: #ff6600;
+            padding: 4px 10px;
+            border: 1px solid #fff;
+            white-space: nowrap;
+            font-size: 12px;
+            font-family: "";
+            background-color: #0066ff;
+        }
+    </style>
+    <script type="text/javascript" src="http://webapi.amap.com/maps?v=1.3&key=608d75903d29ad471362f8c58c550daf"></script>
+    <script type="text/javascript" src="http://cache.amap.com/lbs/static/addToolbar.js"></script>
+    <script type="text/javascript" src="http://cdn.staticfile.org/jquery/3.1.1/jquery.min.js"></script>
+    <style type="text/css">
+        body {
+            font-size: 12px;
+        }
+
+        #tip {
+            background-color: #ddf;
+            color: #333;
+            border: 1px solid silver;
+            box-shadow: 3px 4px 3px 0px silver;
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            border-radius: 5px;
+            overflow: hidden;
+            line-height: 20px;
+        }
+
+        #tip input[type="text"] {
+            height: 25px;
+            border: 0;
+            padding-left: 5px;
+            width: 280px;
+            border-radius: 3px;
+            outline: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="container"></div>
+    <div id="tip">
+        <input type="text" id="keyword" name="keyword" value="请输入关键字：(选定后搜索)" onfocus='this.value=""' />
+    </div>
+    <div class="button-group">
+        <p>host <input type="text" class="button" value="10.0.11.145" id="host" /> </p>
+        <p>spacing <input type="text" value="30" id="spacing" /> </p>
+        <p> with_on_road <input type="checkbox" value="false" id="with_on_road" /> </p>
+        <p>adjacent <input type="checkbox" value="true" checked="true" id="adjacent" /> </p>
+        <p>bound_meter <input type="text" value="200" id="bound_meter" /> </p>
+        <p>limit <input type="text" value="5" id="limit" /> </p>
+        <p>maxCountPerCell <input type="text" value="3" id="max_count_per_cell" /> </p>
+        <p>with_rgeo_type <input type="checkbox" value="false" id="with_rgeo_type" /> </p>
+
+    </div>
+
+    <script>
+        var map = new AMap.Map("container", {
+            resizeEnable: true,
+            center: [116.30809414471425, 39.98410192693929],
+            keyboardEnable: false,
+            zoom: 16
+        });
+        var historyMarkers = new Array();
+
+        AMap.plugin(['AMap.Autocomplete', 'AMap.PlaceSearch'], function() { //回调函数
+            //实例化Autocomplete
+            var autoOptions = {
+                city: "北京", //城市，默认全国
+                input: "keyword" //使用联想输入的input的id
+            };
+            autocomplete = new AMap.Autocomplete(autoOptions);
+            //TODO: 使用autocomplete对象调用相关功能
+            var placeSearch = new AMap.PlaceSearch({
+                city: '北京',
+                map: map
+            });
+            AMap.event.addListener(autocomplete, "select", function(e) {
+                //TODO 针对选中的poi实现自己的功能
+                placeSearch.search(e.poi.name)
+            });
+        });
+
+        var _markerMouseOverHandler = function(e) {
+            console.info(e.target.getExtData());
+        };
+
+        var _onClick = function(e) {
+            var lat = e.lnglat.lat;
+            var lng = e.lnglat.lng;
+            // map.setZoomAndCenter(17, [lng, lat]);
+            map.setCenter([lng, lat]);
+            for (var i = 0; i < historyMarkers.length; i++) {
+                var marker = historyMarkers[i];
+                removeMarker(marker, map);
+            }
+            historyMarkers = new Array();
+            addMarker(lat, lng, map, "mark_r.png", {
+                "latitude": lat,
+                "longitude": lng
+            });
+            sug_point(lat, lng, map);
+        };
+
+        var clickListener = AMap.event.addListener(map, "click", _onClick); //绑定事件，返回监听对象
+
+        function removeMarker(marker, map) {
+            marker.off("mouseover", _markerMouseOverHandler);
+            map.remove(marker);
+        }
+
+        function addMarker(lat, lng, map, iconurl, info) {
+            var marker = new AMap.Marker({
+                icon: iconurl,
+                position: [lng, lat],
+                title: JSON.stringify(info, null, " "),
+                extData: info,
+                map: map
+            });
+
+            marker.on("mouseover", _markerMouseOverHandler);
+            // AMap.event.addListener(marker, "mouseout", function(e) {
+            //     console.info(e);
+            // });
+            historyMarkers.push(marker);
+        }
+
+        function sug_point(lat, lng, map) {
+            var with_on_road = document.getElementById('with_on_road').checked;
+            var adjacent = document.getElementById('adjacent').checked;
+            var bound_meter = document.getElementById('bound_meter').value;
+            var limit = document.getElementById('limit').value;
+            var with_rgeo_type = document.getElementById('with_rgeo_type').checked;
+            var host = document.getElementById('host').value;
+            var spacing = document.getElementById('spacing').value;
+            var max_count_per_cell = document.getElementById('max_count_per_cell').value;
+
+            var url = "http://" + host + ":9979/api/v1/sug/points?coord_type=mars&lat=" + lat + "&lng=" + lng +
+                "&bound_meter=" + bound_meter +
+                "&adjacent=" + adjacent + "&with_on_road=" + with_on_road + "&limit=" + limit +
+                "&max_count_per_cell=" + max_count_per_cell +
+                "&spacing=" + spacing;
+            console.info(url);
+            $.ajax({
+                url: url,
+                success: function(data) {
+                    var points = data.results;
+                    for (var i = 0; i < points.length; i++) {
+                        point = points[i];
+                        var lat = point.latitude;
+                        var lng = point.longitude;
+                        var type = point.type;
+                        if (!with_rgeo_type && type == "rgeo") {
+                            continue;
+                        }
+                        console.info(lat + "," + lng + "|" + point.score + "|" + type + "|" + point.distance + "|" + point.hashId);
+                        if (type == "rgeo") {
+                            addMarker(lat, lng, map, "mark_b.png", point);
+                        } else {
+                            addMarker(lat, lng, map, "mark_g.png", point);
+                        }
+                    }
+
+
+                },
+                settings: {
+                    headers: {
+                        "Access-Control-Allow-Origin": "*",
+                        "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
+                        "Access-Control-Allow-Headers": "*"
+                    },
+                    error: function(xhr, ajaxOptions, thrownError) {
+                        console.error("" + xhr + ajaxOptions + thrownError);
+                    },
+                    crossDomain: true,
+                    dataType: "json"
+                }
+            });
+        }
+    </script>
+    <script type="text/javascript" src="http://webapi.amap.com/demos/js/liteToolbar.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,131 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no, width=device-width">
+    <title>按起终点经纬度规划路线</title>
+    <link rel="stylesheet" href="http://cache.amap.com/lbs/static/main1119.css"/>
+    <style type="text/css">
+        #panel {
+            position: fixed;
+            background-color: white;
+            max-height: 90%;
+            overflow-y: auto;
+            top: 10px;
+            right: 10px;
+            width: 280px;
+        }
+    </style>
+    <script type="text/javascript"
+            src="http://webapi.amap.com/maps?v=1.3&key=fc872cbed2926354351064069cbdf15e&plugin=AMap.Driving"></script>
+    <script type="text/javascript" src="http://cache.amap.com/lbs/static/addToolbar.js"></script>
+    <script type="text/javascript" src="http://cdn.staticfile.org/jquery/3.1.1/jquery.min.js"></script>
+</head>
+<body>
+<div id="container"></div>
+<div id="panel"></div>
+<div class="button-group">
+    <fieldset id="">
+        <label for="pos">当前坐标:</label>
+        <input id="pos" type="text" value=""/>
+    </fieldset>
+    <fieldset id="">
+        <label for="start_pos">开始坐标:</label>
+        <input id="start_pos" type="text" value=""/>
+    </fieldset>
+    <fieldset id="">
+        <label for="end_pos">结束坐标:</label>
+        <input id="end_pos" type="text" value=""/>
+    </fieldset>
+    </fieldset>
+    <fieldset id="">
+        <input id="search" type="button" value="路径规划"/>
+    </fieldset>
+</div>
+<script type="text/javascript">
+
+    var historyMarkers = new Array();
+
+    //基本地图加载
+    var map = new AMap.Map("container", {
+        resizeEnable: true,
+        center: [116.397428, 39.90923],//地图中心点
+        zoom: 13 //地图显示的缩放级别
+    });
+
+    var toggle = true;
+
+    var _onClick = function (e) {
+        var lat = e.lnglat.lat;
+        var lng = e.lnglat.lng;
+        if (toggle) {
+            $("#start_pos").val(lng + "," + lat);
+            toggle = false
+        } else {
+            $("#end_pos").val(lng + "," + lat);
+            toggle = true
+        }
+    };
+    var clickListener = AMap.event.addListener(map, "click", _onClick); //绑定事件，返回监听对象
+
+    function addMarker(lat, lng, map, iconurl, info) {
+        var marker = new AMap.Marker({
+            icon: iconurl,
+            position: [lng, lat],
+            map: map
+        });
+        historyMarkers.push(marker);
+        return marker;
+    }
+
+    $('#search').click(function () {
+
+        for (var i = 0; i < historyMarkers.length; i++) {
+            var marker = historyMarkers[i];
+            map.remove(marker);
+        }
+        historyMarkers.splice(0, historyMarkers.length);
+
+        var start_pos = $("#start_pos").val();
+        var end_pos = $("#end_pos").val();
+        console.info(start_pos + " " + end_pos);
+
+        var url = "http://restapi.amap.com/v3/direction/driving?" +
+                "origin=" + start_pos + "" +
+                "&destination=" + end_pos + "" +
+                "&extensions=all&output=json&key=fc872cbed2926354351064069cbdf15e"
+        console.info(url)
+        $.ajax({
+            url: url,
+            success: function (data) {
+                steps = data.route.paths[0].steps;
+                for (var i = 0; i < steps.length; i++) {
+                    polyline = steps[i].polyline
+
+                    pos = polyline.split(";");
+                    for (var j = 0; j < pos.length; j++) {
+                        lnglat = pos[j].split(",")
+                        console.info(pos[j])
+                        addMarker(lnglat[1], lnglat[0], map, "{{ url_for('static', filename='mark_b.png') }}", "");
+                    }
+                }
+            },
+            settings: {
+                headers: {
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
+                    "Access-Control-Allow-Headers": "*"
+                },
+                error: function (xhr, ajaxOptions, thrownError) {
+                    console.error("" + xhr + ajaxOptions + thrownError);
+                },
+                crossDomain: true,
+                dataType: "json"
+            }
+        });
+    })
+
+</script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+    <title>添加标记</title>
+    <script charset="utf-8" src="http://map.qq.com/api/js?v=2.exp"></script>
+    <style type="text/css">
+        * {
+            margin: 0px;
+            padding: 0px;
+        }
+
+        body, button, input, select, textarea {
+            font: 12px/16px Verdana, Helvetica, Arial, sans-serif;
+        }
+
+        #info {
+            width: 603px;
+            padding-top: 3px;
+            overflow: hidden;
+        }
+
+        .btn {
+            width: 112px;
+        }
+
+        #container {
+            min-width: 600px;
+            min-height: 767px;
+        }
+    </style>
+    <script>
+        var init = function () {
+
+            {{ create_pos }}
+
+            {% for comment in comments %}
+                 {{ comment }}
+            {% endfor %}
+        }
+    </script>
+</head>
+<body onload="init()">
+<div id="container"></div>
+<div id="info" style="margin-top:10px;">
+    <button id="mapM" class="btn">setMap</button>
+    <button id="cable" class="btn">setClickable</button>
+    <button id="drag" class="btn">setDraggable</button>
+    <button id="visibleF" class="btn">setVisible</button>
+    <button id="setP" class="btn">setPosition</button>
+</div>
+</body>
+</html>
+    

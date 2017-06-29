@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no, width=device-width">
+    <title>上车点推荐</title>
+    <link rel="stylesheet" href="http://cache.amap.com/lbs/static/main1119.css"/>
+    <style>
+        .marker {
+            color: #ff6600;
+            padding: 4px 10px;
+            border: 1px solid #fff;
+            white-space: nowrap;
+            font-size: 12px;
+            font-family: "";
+            background-color: #0066ff;
+        }
+    </style>
+    <link rel="stylesheet" href="http://cache.amap.com/lbs/static/main1119.css"/>
+    <script type="text/javascript"
+            src="http://webapi.amap.com/maps?v=1.3&key=608d75903d29ad471362f8c58c550daf"></script>
+    <script type="text/javascript" src="http://cache.amap.com/lbs/static/addToolbar.js"></script>
+    <script type="text/javascript" src="http://cdn.staticfile.org/jquery/3.1.1/jquery.min.js"></script>
+    <style type="text/css">
+        body {
+            font-size: 12px;
+        }
+
+        #tip {
+            background-color: #ddf;
+            color: #333;
+            border: 1px solid silver;
+            box-shadow: 3px 4px 3px 0px silver;
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            border-radius: 5px;
+            overflow: hidden;
+            line-height: 20px;
+        }
+
+        #tip input[type="text"] {
+            height: 25px;
+            border: 0;
+            padding-left: 5px;
+            width: 280px;
+            border-radius: 3px;
+            outline: none;
+        }
+
+    </style>
+</head>
+<body>
+<div id="container"></div>
+<div id="tip">
+    <input type="text" id="keyword" name="keyword" value="请输入关键字：(选定后搜索)" onfocus='this.value=""'/>
+</div>
+<div class="button-group">
+    <fieldset id="">
+        <label for="city">推荐城市:</label>
+        <!--<input id="info" type="textarea" value="" rows="3" cols="20"/>-->
+        <select id="city">
+            <option value="bj">北京</option>
+            <option value="km">昆明</option>
+        </select>
+    </fieldset>
+</div>
+<script type="text/javascript">
+
+    var map = new AMap.Map("container", {
+        resizeEnable: true,
+        //center: [116.30809414471425, 39.98410192693929],
+        center: [{{ lng }}, {{ lat }}],
+        keyboardEnable: false,
+        zoom: 16
+    });
+
+    var historyMarkers = new Array();
+
+
+    AMap.plugin(['AMap.Autocomplete', 'AMap.PlaceSearch'], function () {//回调函数
+        //实例化Autocomplete
+        var autoOptions = {
+            city: "北京", //城市，默认全国
+            input: "keyword"//使用联想输入的input的id
+        };
+        autocomplete = new AMap.Autocomplete(autoOptions);
+        var placeSearch = new AMap.PlaceSearch({
+            city: '北京',
+            map: map
+        });
+        AMap.event.addListener(autocomplete, "select", function (e) {
+            placeSearch.search(e.poi.name)
+        });
+    });
+
+    var _onClick = function (e) {
+
+        var lat = e.lnglat.lat;
+        var lng = e.lnglat.lng;
+        map.setCenter([lng, lat]);
+
+        for (var i = 0; i < historyMarkers.length; i++) {
+            var marker = historyMarkers[i];
+            map.remove(marker);
+        }
+        historyMarkers.splice(0, historyMarkers.length);
+
+        show(lat, lng, map, null);
+    };
+
+    var clickListener = AMap.event.addListener(map, "click", _onClick); //绑定事件，返回监听对象
+
+    function addMarker(lat, lng, map, iconurl, info) {
+        var marker = new AMap.Marker({
+            icon: iconurl,
+            position: [lng, lat]
+        });
+        marker.setMap(map);
+
+        marker.setLabel({
+            offset: new AMap.Pixel(10, -10),//修改label相对于maker的位置
+            content: info
+        });
+
+        historyMarkers.push(marker);
+
+        return marker
+    }
+
+
+    function show(lat, lng, map, geohash) {
+        var city = $("#city").val();
+
+        // 默认按坐标取推荐点
+        var url = "{{ url_for('api.recomms') }}?city=" + city + "&lat=" + lat + "&lng=" + lng;
+
+        // 若指定了坐标的geohash，优先使用geohash取推荐点
+        if (geohash != null && geohash != undefined && geohash.length > 0) {
+            url = "{{ url_for('api.recomms') }}?city=" + city + "&geohash=" + geohash;
+        }
+
+        var startPos = addMarker(lat, lng, map, "{{ url_for('static', filename='mark_r.png') }}", "");
+        console.info(url);
+        $.ajax({
+            url: url,
+            success: function (data) {
+                console.info(data)
+                if ("regeo" in data) {
+                    startPos.setLabel({offset: new AMap.Pixel(10, -10), content: data.regeo});
+                } else {
+                    startPos.setLabel({offset: new AMap.Pixel(10, -10), content: "no recomms"});
+                }
+                if ("num" in data && data.num > 0) {
+                    var points = data.recomms;
+                    for (var i = 0; i < points.length; i++) {
+                        point = points[i];
+                        var lat = point.lat;
+                        var lng = point.lng;
+                        var info = point.name;
+                        var score = point.score;
+                        var count = point.count;
+                        info = info + " | " + score + " | " + count;
+                        console.info(lat + "," + lng + " -> " + info);
+                        if (point.ext == "cooccur") {
+                            addMarker(lat, lng, map, "{{ url_for('static', filename="mark_g.png") }}", info);
+                        } else {
+                            addMarker(lat, lng, map, "{{ url_for('static', filename="mark_b.png") }}", info);
+                        }
+
+                    }
+                } else {
+                    console.info("no recomms find")
+                }
+            },
+            settings: {
+                headers: {
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
+                    "Access-Control-Allow-Headers": "*"
+                },
+                error: function (xhr, ajaxOptions, thrownError) {
+                    console.error("" + xhr + ajaxOptions + thrownError);
+                },
+                crossDomain: true,
+                dataType: "json"
+            }
+        });
+
+
+    }
+</script>
+</body>
+<script type="application/javascript">
+
+    map.on('complete', function () {
+        var lat = {{ lat }};
+        var lng = {{ lng }};
+        var geohash = "{{ geohash }}";
+
+        console.info("初始化位置：" + lat + "," + lng + " | " + geohash);
+        map.setCenter([lng, lat]);
+        show(lat, lng, map, geohash);
+    });
+</script>
+</html>

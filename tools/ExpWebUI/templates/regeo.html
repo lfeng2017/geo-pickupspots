@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no, width=device-width">
+    <title>regeo名称</title>
+    <link rel="stylesheet" href="http://cache.amap.com/lbs/static/main1119.css" />
+    <style>
+        .marker {
+            color: #ff6600;
+            padding: 4px 10px;
+            border: 1px solid #fff;
+            white-space: nowrap;
+            font-size: 12px;
+            font-family: "";
+            background-color: #0066ff;
+        }
+    </style>
+    <script type="text/javascript" src="http://webapi.amap.com/maps?v=1.3&key=608d75903d29ad471362f8c58c550daf"></script>
+    <script type="text/javascript" src="http://cache.amap.com/lbs/static/addToolbar.js"></script>
+    <script type="text/javascript" src="http://cdn.staticfile.org/jquery/3.1.1/jquery.min.js"></script>
+    <style type="text/css">
+        body {
+            font-size: 12px;
+        }
+
+        #tip {
+            background-color: #ddf;
+            color: #333;
+            border: 1px solid silver;
+            box-shadow: 3px 4px 3px 0px silver;
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            border-radius: 5px;
+            overflow: hidden;
+            line-height: 20px;
+        }
+
+        #tip input[type="text"] {
+            height: 25px;
+            border: 0;
+            padding-left: 5px;
+            width: 280px;
+            border-radius: 3px;
+            outline: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="container"></div>
+    <div id="tip">
+        <input type="text" id="keyword" name="keyword" value="请输入关键字：(选定后搜索)" onfocus='this.value=""' />
+    </div>
+    <div class="button-group">
+        <fieldset id="">
+            <label for="start_pos">开始点坐标:</label>
+            <input id="start_pos" type="text" value="200" />
+        </fieldset>
+    </div>
+    <script>
+        var map = new AMap.Map("container", {
+            resizeEnable: true,
+            center: [116.30809414471425, 39.98410192693929],
+            keyboardEnable: false,
+            zoom: 16
+        });
+        var historyMarkers = new Array();
+        var infoWindow = new AMap.InfoWindow({
+            offset: new AMap.Pixel(0, -30)
+        });
+
+        AMap.plugin(['AMap.Autocomplete', 'AMap.PlaceSearch'], function() { //回调函数
+            //实例化Autocomplete
+            var autoOptions = {
+                city: "北京", //城市，默认全国
+                input: "keyword" //使用联想输入的input的id
+            };
+            autocomplete = new AMap.Autocomplete(autoOptions);
+            var placeSearch = new AMap.PlaceSearch({
+                city: '北京',
+                map: map
+            });
+            AMap.event.addListener(autocomplete, "select", function(e) {
+                placeSearch.search(e.poi.name)
+            });
+        });
+
+        var _onClick = function(e) {
+
+            var lat = e.lnglat.lat;
+            var lng = e.lnglat.lng;
+            map.setCenter([lng, lat]);
+
+            for (var i = 0; i < historyMarkers.length; i++) {
+                var marker = historyMarkers[i];
+                map.remove(marker);
+            }
+            historyMarkers.splice(0, historyMarkers.length);
+
+            show(lat, lng, map);
+        };
+
+        var clickListener = AMap.event.addListener(map, "click", _onClick); //绑定事件，返回监听对象
+
+        function addMarker(lat, lng, map, iconurl, info) {
+            var marker = new AMap.Marker({
+                icon: iconurl,
+                position: [lng, lat],
+                map: map
+            });
+
+            marker.setLabel({
+                offset: new AMap.Pixel(10, -10),//修改label相对于maker的位置
+                content: info
+            });
+            historyMarkers.push(marker);
+            return marker;
+        }
+
+
+        function show(lat, lng, map) {
+            // 显示开始点坐标
+            $("#start_pos").val(lat + "," + lng)
+            // 构造高德rest请求
+            var pos = lng + "," + lat
+            var url = "{{ url_for('api.RegeoName') }}?lat=" + lat + "&lng=" + lng
+            console.info(url)
+            $.ajax({
+                url: url,
+                success: function(data) {
+                    // 显示开始点
+                    addMarker(lat, lng, map, "{{ url_for('static', filename='mark_r.png') }}", data.result);
+                },
+                settings: {
+                    headers: {
+                        "Access-Control-Allow-Origin": "*",
+                        "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
+                        "Access-Control-Allow-Headers": "*"
+                    },
+                    error: function(xhr, ajaxOptions, thrownError) {
+                        console.error("" + xhr + ajaxOptions + thrownError);
+                    },
+                    crossDomain: true,
+                    dataType: "json"
+                }
+            });
+        }
+    </script>
+    <script type="text/javascript" src="http://webapi.amap.com/demos/js/liteToolbar.js"></script>
+</body>
+
+</html>
